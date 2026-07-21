@@ -1,3 +1,15 @@
+## Table of Contents
+
+- Overview
+- Model Configuration
+- Three-Stage Calibration
+- Full Parameter Summary
+- Output Files
+- Running the Code
+- Dependencies
+- References
+- Citation
+
 # Recidivism ABM — Phase 1: Three-Stage OAT Calibration
 
 **Project:** An Agent-Based Model of Recidivism and Fairness  
@@ -84,7 +96,19 @@ in subsequent phases.
 | Runs per sweep point | 100 simulations |
 
 ---
+## Reproducibility
 
+The calibration follows a sequential three-stage one-at-a-time (OAT) grid-search procedure.
+
+At each stage:
+
+- previously calibrated parameters remain fixed;
+- candidate values are evaluated over predefined search ranges;
+- each candidate value is evaluated using 10 replications across 10 random seeds (100 stochastic simulations); and
+- the parameter value minimizing the stage-specific loss function is selected before proceeding to the next stage.
+
+This repository contains the complete calibration scripts, parameter search ranges, selected values, output files, and figures required to reproduce the calibration results reported in the SBP-BRiMS 2026 paper.
+---
 ## Three-Stage Calibration
 
 ### Stage 1 — BJS National Aggregate Calibration
