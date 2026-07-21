@@ -108,6 +108,7 @@ At each stage:
 - the parameter value minimizing the stage-specific loss function is selected before proceeding to the next stage.
 
 This repository contains the complete calibration scripts, parameter search ranges, selected values, output files, and figures required to reproduce the calibration results reported in the SBP-BRiMS 2026 paper.
+
 ---
 ## Three-Stage Calibration
 
@@ -239,21 +240,21 @@ windows). Each offense is swept independently with all other parameters locked.
 
 ## Full Parameter Summary
 
-| Stage | Symbol | Parameter | Baseline | Calibrated |
-|-------|--------|-----------|----------|------------|
-| 2 | γ | Risk Contrast Strength | 0.000 | 1.000 |
-| 1 | α | Supervision Monitoring Intensity | 1.000 | 1.120 |
-| 1* | dr1 | Desistance Years 1–3 [fixed] | — | 0.524 |
-| 1* | dr3 | Desistance Years 3–6 [fixed] | — | 0.500 |
-| 1* | dr6 | Desistance Years 6–9 [fixed] | — | 0.508 |
-| 1 | δ_s3 | Supervision Decay 3–6 yr | 1.000 | 0.990 |
-| 1 | δ_s6 | Supervision Decay 6–9 yr | 1.000 | 0.400 |
-| 3 | o_v | Violent offense shift | 0.000 | −0.300 |
-| 3 | o_d | Drug offense shift | 0.000 | +0.050 |
-| 3 | o_p | Property offense shift | 0.000 | +0.600 |
-| 3 | o_o | Other/Public Order shift | 0.000 | −0.400 |
+Fixed parameters were derived directly from the BJS hazard decomposition and were not estimated during calibration. Each estimated parameter was calibrated independently using a one-at-a-time (OAT) grid-search procedure. Candidate values were evaluated over predefined search ranges using 10 replications across 10 random seeds (100 stochastic simulations). Previously calibrated parameters remained fixed during subsequent calibration stages, and the parameter value minimizing the stage-specific objective function was selected.
 
-*Fixed at BJS hazard decomposition anchor — not swept.
+| Stage | Symbol | Parameter | Search Range | Objective Function | Selected Value |
+|-------|:------:|-----------|--------------|--------------------|---------------:|
+| 1 | α | Supervision Monitoring Intensity | 1.00–1.20 | Aggregate BJS MAE (3, 6, 9 yr) | **1.120** |
+| 1 | dr1 | Desistance Ratio (1–3 yr) | Fixed | BJS hazard decomposition | **0.524** |
+| 1 | dr3 | Desistance Ratio (3–6 yr) | Fixed | BJS hazard decomposition | **0.500** |
+| 1 | dr6 | Desistance Ratio (6–9 yr) | Fixed | BJS hazard decomposition | **0.508** |
+| 1 | δs3 | Supervision Decay (3–6 yr) | 0.60–0.99 | Aggregate BJS MAE | **0.990** |
+| 1 | δs6 | Supervision Decay (6–9 yr) | 0.20–0.70 | Aggregate BJS MAE | **0.400** |
+| 2 | γ | Risk Contrast Strength | 0.75–1.50 | PCRA Tier MAE (4 tiers × 3 windows) | **1.000** |
+| 3 | ov | Violent Hazard Shift | −0.40–0.05 | Offense MAE (4 offenses × 3 windows) | **−0.300** |
+| 3 | od | Drug Hazard Shift | −0.15–0.20 | Offense MAE | **0.050** |
+| 3 | op | Property Hazard Shift | 0.20–0.80 | Offense MAE | **0.600** |
+| 3 | oo | Other/Public Order Hazard Shift | −0.40–0.05 | Offense MAE | **−0.400** |
 
 ---
 
