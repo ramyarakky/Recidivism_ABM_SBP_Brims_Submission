@@ -2391,7 +2391,7 @@ def plot_equifinality_single_panel(baseline_tier, calibrated_tier,
     cal_vals   = [calibrated_tier.get(t, 0.0) for t in TIERS]
     tgt_vals   = [PCRA_TARGETS[t][3]           for t in TIERS]
 
-    fig, ax = plt.subplots(figsize=(11, 7))
+    fig, ax = plt.subplots(figsize=(11, 5))
     fig.patch.set_facecolor("#FAFAFA")
 
     x       = np.arange(len(TIERS))
@@ -2401,7 +2401,9 @@ def plot_equifinality_single_panel(baseline_tier, calibrated_tier,
     bar_specs = [
         (offsets[0], uncal_vals, C["baseline"],   "Uncalibrated γ = 0.0"),
         (offsets[1], cal_vals,   C["calibrated"], f"Calibrated {gamma_label}"),
+        #(offsets[2], tgt_vals,   C["bjs"],        "PCRA empirical target"),
         (offsets[2], tgt_vals,   C["bjs"],        "PCRA empirical target"),
+        #(offsets[2], tgt_vals,   C["bjs"],        "_nolegend_"),
     ]
 
     for off, vals, colour, label in bar_specs:
@@ -2495,7 +2497,7 @@ def plot_threeway_rate_comparison(baseline_rates, calibrated_rates, outdir,
     mae_cal   = float(np.mean([abs(c - t) for c, t in zip(c_vals, t_vals)]))
     reduction = ((mae_uncal - mae_cal) / mae_uncal * 100) if mae_uncal > 0 else 0.0
 
-    fig, ax = plt.subplots(figsize=(10, 7))
+    fig, ax = plt.subplots(figsize=(10, 5))
     fig.patch.set_facecolor("#FAFAFA")
 
     x       = np.arange(len(windows))
@@ -2555,14 +2557,14 @@ def plot_threeway_rate_comparison(baseline_rates, calibrated_rates, outdir,
         "Three-Stage Calibration Across 3, 6, and 9 Year Follow-Up Windows",
         fontsize=13, fontweight="bold", pad=14,
     )
-    fig.text(
-        0.5, 0.01,
-        f"BJS targets: 3yr = {targets[3]:.1%}  |  6yr = {targets[6]:.1%}  |  "
-        f"9yr = {targets[9]:.1%}  |  "
-        "Source: Alper et al. (2018), BJS NCJ 250975",
-        ha="center", va="bottom", fontsize=9,
-        color="#555555", style="italic",
-    )
+    #fig.text(
+    #    0.5, 0.01,
+    #    f"BJS targets: 3yr = {targets[3]:.1%}  |  6yr = {targets[6]:.1%}  |  "
+    #    f"9yr = {targets[9]:.1%}  |  "
+    #    "Source: Alper et al. (2018), BJS NCJ 250975",
+    #    ha="center", va="bottom", fontsize=9,
+    #    color="#555555", style="italic",
+    #)
 
     plt.tight_layout(rect=[0, 0.04, 1, 1])
     path = os.path.join(outdir, filename)
