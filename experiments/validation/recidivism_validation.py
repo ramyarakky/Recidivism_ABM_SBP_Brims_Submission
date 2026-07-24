@@ -925,16 +925,12 @@ def chart2_cumulative_bar(cum_mean, cum_lo, cum_hi, cum_sd, out_dir):
 #           - σ summary added
 #           - bottom legend separated from gap legend (no overlap)
 # =============================================================================
-# =============================================================================
-# CHART 3 — Print-ready version for SBP-BRiMS paper (textwidth)
-#           Taller aspect ratio, all fonts sized for PDF at ~6.5in wide
-# =============================================================================
 def chart3_cumulative_by_offense(off_mean, off_lo, off_hi, off_sd, out_dir):
     fig = make_subplots(
         rows=1, cols=4,
         subplot_titles=[f"<b>{g}</b>" for g in OFFENSE_GROUPS],
         shared_yaxes=True,
-        horizontal_spacing=0.05,
+        horizontal_spacing=0.03,
     )
 
     for col_idx, g in enumerate(OFFENSE_GROUPS, start=1):
@@ -962,8 +958,8 @@ def chart3_cumulative_by_offense(off_mean, off_lo, off_hi, off_sd, out_dir):
         fig.add_trace(go.Scatter(
             x=BJS_YEARS, y=abm_m, mode="lines+markers",
             name=g, legendgroup=g, showlegend=False,
-            line=dict(color=colour, width=3.0),
-            marker=dict(size=9, color=colour),
+            line=dict(color=colour, width=2.5),        # 3.0 -> 2.5
+            marker=dict(size=7, color=colour),          # 9 -> 7
             customdata=abm_sd,
             hovertemplate=(f"<b>ABM {g} Yr %{{x}}</b><br>"
                            f"%{{y:.1f}}%<br>σ: %{{customdata:.2f}} pp"
@@ -974,69 +970,58 @@ def chart3_cumulative_by_offense(off_mean, off_lo, off_hi, off_sd, out_dir):
         fig.add_trace(go.Scatter(
             x=BJS_YEARS, y=bjs_off, mode="lines+markers",
             name=f"BJS — {g}", legendgroup=g, showlegend=False,
-            line=dict(color=colour, width=2.2, dash="dash"),
-            marker=dict(symbol="diamond-open", size=9,
-                        color=colour, line=dict(width=2.0)),
+            line=dict(color=colour, width=1.8, dash="dash"),  # 2.2 -> 1.8
+            marker=dict(symbol="diamond-open", size=7,         # 9 -> 7
+                        color=colour, line=dict(width=1.5)),   # 2.0 -> 1.5
             hovertemplate=(f"<b>BJS {g} Yr %{{x}}</b><br>"
                            f"%{{y:.1f}}%<extra></extra>"),
         ), row=1, col=col_idx)
 
-        # Δ labels at anchor years — large enough to read in print
+        # Delta labels — tighter vertical offsets to avoid overlap at reduced height
         for j, anchor_yr in enumerate(ANCHOR_YEARS):
             i    = anchor_yr - 1
             diff = diffs[i]
-            anchor_y = (max(abm_m[i], bjs_off[i]) + 4.5 if j % 2 == 0
-                        else min(abm_m[i], bjs_off[i]) - 6.0)
+            anchor_y = (max(abm_m[i], bjs_off[i]) + 2.5 if j % 2 == 0   # 4.5 -> 2.5
+                        else min(abm_m[i], bjs_off[i]) - 3.5)             # 6.0 -> 3.5
             _add_gap_label(
                 fig, x=anchor_yr, y=anchor_y, diff=diff,
-                row=1, col=col_idx, fontsize=14,
+                row=1, col=col_idx, fontsize=11,        # 14 -> 11
             )
 
-    # X-axis — every panel
     fig.update_xaxes(
         title_text="Years since release",
-        title_font=dict(size=16, family=_FONT_FAMILY),
-        tickfont=dict(size=14, family=_FONT_FAMILY),
+        title_font=dict(size=13, family=_FONT_FAMILY),  # 16 -> 13
+        tickfont=dict(size=11, family=_FONT_FAMILY),    # 14 -> 11
         tickvals=BJS_YEARS,
         showgrid=False,
         range=[0.5, 9.5],
     )
-
-    # Y-axis — all panels
     fig.update_yaxes(
-        range=[23, 108],                          # extra headroom for Δ labels
+        range=[23, 108],
         gridcolor=_C_GRID,
         zeroline=False,
-        tickfont=dict(size=14, family=_FONT_FAMILY),
+        tickfont=dict(size=11, family=_FONT_FAMILY),    # 14 -> 11
     )
-
-    # Y-axis title — first panel only
     fig.update_yaxes(
         title_text="Cumulative rearrest rate (%)",
-        title_font=dict(size=16, family=_FONT_FAMILY),
+        title_font=dict(size=13, family=_FONT_FAMILY),  # 16 -> 13
         row=1, col=1,
     )
 
-    # Subplot titles (panel headers: Violent / Drug / Property / Public order)
+    # Subplot titles scaled to match height
     for ann in fig.layout.annotations:
-        ann.font = dict(size=18, family=_FONT_FAMILY, color="#1A2B3C")
+        ann.font = dict(size=14, family=_FONT_FAMILY, color="#1A2B3C")  # 18 -> 14
 
     fig.update_layout(**_LAYOUT,
         title=dict(
             text=("<b>Stage 3 — Offense-Stratified Calibration: "
-                  "ABM vs. BJS Empirical Targets</b><br>"
-                  "<sup style='color:#555; font-size:13px'>"
-                  "Solid line = ABM calibrated  |  "
-                  "Dashed line = BJS NCJ 250975 target  |  "
-                  "Alper et al. (2018), Table 7</sup>"),
-            font=dict(size=20, family=_FONT_FAMILY),
+                  "ABM vs. BJS Empirical Targets</b><br>"),
+            font=dict(size=15, family=_FONT_FAMILY),    # 20 -> 15
             x=0.5, xanchor="center",
         ),
-        # Taller aspect ratio — 4:3 instead of 2.4:1
-        # At textwidth (~6.5 in), 1000×750 renders at ~100 dpi before Springer scales it
-        width=1400,
-        height=850,
-        margin=dict(t=110, b=50, l=90, r=30),
+        width=980,
+        height=420,
+        margin=dict(t=100, b=50, l=90, r=60),   # r: 20 -> 60 to stop right truncation
     )
 
     _save(fig, os.path.join(out_dir, "chart3_cumulative_by_offense.png"))
