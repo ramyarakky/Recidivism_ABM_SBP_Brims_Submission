@@ -1954,6 +1954,9 @@ def plot_tier_before_after(baseline_tier, calibrated_tier, cal_params, outdir):
     gamma_val = _get_param(cal_params, "Risk_Contrast_Strength") or 0.875
 
     fig, axes = plt.subplots(1, 2, figsize=(15, 7), sharey=True)
+    fig.patch.set_facecolor("white")
+    for ax in axes:
+        ax.set_facecolor("white")
 
     fig.suptitle(
         "PCRA Risk-Tier-Stratified Rearrest Rates:\n"
@@ -2456,8 +2459,9 @@ def plot_equifinality_single_panel(baseline_tier, calibrated_tier,
     ax.legend(loc="upper left", fontsize=10,
               frameon=True, framealpha=0.92, edgecolor="#CCCCCC")
 
-    ax.set_title("PCRA Risk-Tier-Stratified Rearrest Rates:\n"
-                 "Before vs. After Stage 2 Calibration",
+    ax.set_title( 
+                "Before vs. After Stage 2 Calibration:\n"
+                "PCRA Risk-Tier-Stratified Rearrest Rates" ,
                  fontsize=13, fontweight="bold", pad=14)
     #fig.text(0.5, 0.01,
     #         f"3-Year cumulative rearrest rate by PCRA risk tier  |  "
@@ -2468,8 +2472,9 @@ def plot_equifinality_single_panel(baseline_tier, calibrated_tier,
 
     plt.tight_layout(rect=[0, 0.04, 1, 1])
     path = os.path.join(outdir, filename)
-    plt.savefig(path, dpi=150, bbox_inches="tight",
-                facecolor=fig.get_facecolor())
+    #plt.savefig(path, dpi=150, bbox_inches="tight",
+    #            facecolor=fig.get_facecolor())
+    plt.savefig(path, dpi=150, bbox_inches="tight", facecolor="white", edgecolor="white")
     plt.close()
     print(f"  Equifinality single-panel chart -> {path}")
 
@@ -2498,7 +2503,9 @@ def plot_threeway_rate_comparison(baseline_rates, calibrated_rates, outdir,
     reduction = ((mae_uncal - mae_cal) / mae_uncal * 100) if mae_uncal > 0 else 0.0
 
     fig, ax = plt.subplots(figsize=(10, 5))
-    fig.patch.set_facecolor("#FAFAFA")
+    #fig.patch.set_facecolor("#FAFAFA")
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
 
     x       = np.arange(len(windows))
     w       = 0.24
@@ -2522,14 +2529,14 @@ def plot_threeway_rate_comparison(baseline_rates, calibrated_rates, outdir,
                     fontsize=9, fontweight="bold", color=colour)
 
     # MAE annotation box — bottom right, clear of bars
-    ax.text(0.98, 0.97,
-            f"Mean |Δ| uncalibrated : {mae_uncal * 100:.2f} pp\n"
-            f"Mean |Δ| calibrated   : {mae_cal   * 100:.2f} pp\n"
-            f"MAE reduction         : {reduction:+.1f}%",
-            transform=ax.transAxes, ha="right", va="top",
-            fontsize=9, family="monospace", color="#333333",
-            bbox=dict(boxstyle="round,pad=0.45", facecolor="white",
-                      edgecolor="#CCCCCC", alpha=0.95, linewidth=1.0))
+    #ax.text(0.98, 0.97,
+    #        f"Mean |Δ| uncalibrated : {mae_uncal * 100:.2f} pp\n"
+    #        f"Mean |Δ| calibrated   : {mae_cal   * 100:.2f} pp\n"
+    #        f"MAE reduction         : {reduction:+.1f}%",
+    #        transform=ax.transAxes, ha="right", va="top",
+    #        fontsize=9, family="monospace", color="#333333",
+    #        bbox=dict(boxstyle="round,pad=0.45", facecolor="white",
+    #                  edgecolor="#CCCCCC", alpha=0.95, linewidth=1.0))
 
     ax.set_xticks(x)
     ax.set_xticklabels(WIN_LB, fontsize=11)
@@ -2568,8 +2575,7 @@ def plot_threeway_rate_comparison(baseline_rates, calibrated_rates, outdir,
 
     plt.tight_layout(rect=[0, 0.04, 1, 1])
     path = os.path.join(outdir, filename)
-    plt.savefig(path, dpi=150, bbox_inches="tight",
-                facecolor=fig.get_facecolor())
+    plt.savefig(path, dpi=150, bbox_inches="tight", facecolor="white", edgecolor="white")
     plt.close()
     print(f"  Three-way rate comparison -> {path}")
 
