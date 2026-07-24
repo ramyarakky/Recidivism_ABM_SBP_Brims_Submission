@@ -112,7 +112,7 @@ CONFIG = {
     "study_months":          108,
     "bias_factor":           0.0,
     "enable_peer_influence": True,
-    "output_directory":      "oat_sensitivity_output_0513",
+    "output_directory":      "OAT_SensitivityAnalysis_Output",
     "N_REPS":                10,
     "SEEDS":                 [42, 137, 251, 389, 503, 617, 743, 863, 971, 1087],
     "bjs_targets":           {3: 0.68, 6: 0.79, 9: 0.83},
@@ -598,8 +598,9 @@ def _tornado_legends(ax):
 
 
 def _save(fig, path):
-    fig.savefig(path, dpi=150, bbox_inches="tight",
-                facecolor=COLORS["bg"])
+    #fig.savefig(path, dpi=150, bbox_inches="tight",
+    #            facecolor=COLORS["bg"])
+    fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="white", edgecolor="white")
     plt.close(fig)
     print(f"    -> {os.path.basename(path)}")
 
@@ -607,7 +608,6 @@ def _save(fig, path):
 # =============================================================================
 # CHART 1 — Tornado Charts (per window)
 # =============================================================================
-
 def plot_tornado(all_results: list, window: int, outdir: str) -> str:
     targets = CONFIG["bjs_targets"]
 
@@ -640,54 +640,57 @@ def plot_tornado(all_results: list, window: int, outdir: str) -> str:
     rows.sort(key=lambda x: x["mag40"])
     n = len(rows)
 
-    fig, ax = plt.subplots(figsize=(16, max(6, n * 0.68 + 2.0)))
-    fig.patch.set_facecolor(COLORS["bg"])
-    fig.subplots_adjust(left=0.30)
+    fig, ax = plt.subplots(figsize=(16, max(5, n * 0.48 + 1.0)))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+    fig.subplots_adjust(left=0.13, right=0.97, top=0.90, bottom=0.08)
 
     for i, row in enumerate(rows):
         c_pos = COLORS["up"]   if row["delta_pos"] >= 0 else COLORS["down"]
         c_neg = COLORS["down"] if row["delta_neg"] <= 0 else COLORS["up"]
         ax.barh(i, row["delta_pos"], color=c_pos, alpha=0.85,
-                height=0.58, zorder=3,
+                height=0.92, zorder=3,
                 label="+40%" if i == 0 else "")
         ax.barh(i, row["delta_neg"], color=c_neg, alpha=0.85,
-                height=0.58, zorder=3)
+                height=0.92, zorder=3)
 
-        ext = max(abs(row["delta_pos"]), abs(row["delta_neg"]))
-        ax.text(ext + 0.0008, i,
-                f"±40%: {row['mag40']:.4f}   ±20%: {row['mag20']:.4f}",
-                va="center", fontsize=8, color="#444444")
-
+    max_ext = max(max(abs(row["delta_pos"]), abs(row["delta_neg"])) for row in rows)
+    ax.set_xlim(-max_ext * 1.15, max_ext * 1.15)
     ax.set_yticks(range(n))
+    ax.set_ylim(-0.6, n - 0.4)
     _draw_pill_labels(ax, rows, fontsize=9)
     ax.axvline(0, color="#333333", linewidth=1.3, zorder=4)
     ax.xaxis.set_major_formatter(FuncFormatter(lambda x, _: f"{x:+.1%}"))
-    _tornado_legends(ax)
+    ax.grid(True, axis="x", color="#DDDDDD", linewidth=0.7, linestyle="-", zorder=0)
 
-    bjs_t = targets[window]
+    # Combined legend (parameter group + perturbation direction), single box, bottom right
+    grp_patches = [
+        mpatches.Patch(color=c, label=g) for g, c in GROUP_COLORS.items()
+    ]
+    bar_patches = [
+        mpatches.Patch(color=COLORS["up"],   alpha=0.85, label="+40% perturbation"),
+        mpatches.Patch(color=COLORS["down"], alpha=0.85, label="-40% perturbation"),
+    ]
+    ax.legend(handles=grp_patches + bar_patches, fontsize=8.5,
+              loc="lower right", framealpha=0.92,
+              title="Parameter group & Perturbation direction",
+              title_fontsize=8.5,
+              bbox_to_anchor=(0.99, 0.02))
+
     ax.set_title(
-        f"Tornado Chart — {window}-Year Rearrest Rate Sensitivity  "
-        f"(BJS target = {bjs_t:.0%})\n"
-        f"Bars = change from ±40% perturbation | "
-        f"Sorted by magnitude | Label colour = parameter group",
-        fontsize=12, fontweight="bold", pad=12, color="#1A3D5C",
+        f"{window}-Year Rearrest Rate Sensitivity to Perturbation",
+        fontsize=13, fontweight="bold", pad=10, color="#1A3D5C",
     )
     ax.set_xlabel(
         f"Change in {window}-Year Cumulative Rearrest Rate from Calibrated Baseline",
         fontsize=10,
     )
 
-    # BJS calibration annotation
-    ax.text(0.01, 0.02,
-            f"Calibrated baseline: {bjs_t:.0%} (BJS NCJ 250975)",
-            transform=ax.transAxes, fontsize=8.5, color="#1A3D5C",
-            style="italic",
-            bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
-                      edgecolor="#CCCCCC", alpha=0.8))
-
     plt.tight_layout()
     path = os.path.join(outdir, f"oat_tornado_{window}yr.png")
-    _save(fig, path)
+    fig.savefig(path, dpi=150, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"    -> {os.path.basename(path)}")
     return path
 
 
@@ -996,10 +999,10 @@ def plot_full_report(all_results: list, outdir: str) -> str:
                   alpha=0.85, height=0.58, zorder=3)
         ax_a.barh(i, row["delta_neg"], color=c_neg,
                   alpha=0.85, height=0.58, zorder=3)
-        ext = max(abs(row["delta_pos"]), abs(row["delta_neg"]))
-        ax_a.text(ext + 0.0005, i,
-                  f"±40%:{row['mag40']:.4f}  ±20%:{row['mag20']:.4f}",
-                  va="center", fontsize=7.5, color="#444444")
+        #ext = max(abs(row["delta_pos"]), abs(row["delta_neg"]))
+        #ax_a.text(ext + 0.0005, i,
+        #          f"±40%:{row['mag40']:.4f}  ±20%:{row['mag20']:.4f}",
+        #          va="center", fontsize=7.5, color="#444444")
 
     ax_a.set_yticks(range(len(rows_t)))
     _draw_pill_labels(ax_a, rows_t, fontsize=8.5)
