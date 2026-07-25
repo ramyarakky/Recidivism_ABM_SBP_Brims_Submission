@@ -260,7 +260,7 @@ RUN_CFG = dict(initial_agents=1000, monthly_intake=10,
 
 TIMESTAMP = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 OUT_DIR   = os.path.join(os.path.dirname(__file__),
-                          "oat_stress_output", TIMESTAMP)
+                          "OAT_StressTest_Output", TIMESTAMP)
 os.makedirs(OUT_DIR, exist_ok=True)
 
 # =============================================================================
