@@ -86,10 +86,10 @@ in subsequent phases.
 
 | Parameter | Value |
 |-----------|-------|
-| Initial agents | 3,000 |
+| Initial agents | 1,500 |
 | Warm-up period | 144 months (12 years) |
 | Study period | 108 months (9 years) |
-| Monthly intake | 10 agents |
+| Monthly intake | 10% of initial agents |
 | Peer influence | Enabled |
 | Mode | Realistic |
 | Bias factor | 0.0 (Phase 1 — no bias injected) |
