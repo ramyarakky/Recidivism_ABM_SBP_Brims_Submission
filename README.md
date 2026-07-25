@@ -7,6 +7,46 @@
 
 ---
 
+# Table of Contents
+
+- [Overview](#overview)
+- [SBP-BRiMS Model Configuration](#sbp-brims-model-configuration)
+- [Calibration Procedure](#calibration-procedure)
+- [Stage 1 — National Rearrest Calibration](#stage-1--national-rearrest-calibration)
+- [Stage 2 — PCRA Risk-Tier Calibration](#stage-2--pcra-risk-tier-calibration)
+- [Stage 3 — Offense-Type Calibration](#stage-3--offense-type-calibration)
+- [Complete SBP-BRiMS Calibration Summary](#complete-sbp-brims-calibration-summary)
+- [Sensitivity and Robustness Experiments](#sensitivity-and-robustness-experiments)
+- [Output Files](#output-files)
+- [Running the Calibration](#running-the-calibration)
+- [Dependencies](#dependencies)
+- [References](#references)
+- [Citation](#citation)
+
+---
+
+## Repository Structure
+
+```text
+Recidvism_ABM_SBP_Brims_Submission/
+├── README.md
+├── references.bib
+├── agents/person.py
+├── model/recidivism_model.py
+├── config/risk_config.py
+├── references.bib
+├── experiments/OAT_Calibrate_BJS_PCRA.py
+├── experiments/OAT_SensitivityAnalysis.py
+├── experiments/OAT_StressSimulation.py
+├── experiments/OAT_Calibrate_BJS_PCRA_Offense_Output/
+├── experiments/OAT_SensitivityAnalysis_Output/
+├── experiments/OAT_StressTest_Output/
+├── SBP_Images/
+└── requirements.txt
+```
+
+---
+
 ## Overview
 
 This repository contains the agent-based model, calibration scripts, validation outputs, and figures used in the SBP-BRiMS 2026 paper *An Agent-Based Model of Recidivism*.
@@ -196,7 +236,7 @@ Four offense-specific log-odds shifts are applied through `delta_off` after the 
 
 ---
 
-# Calibration Summary
+# Complete SBP-BRiMS Calibration Summary
 
 | Stage | Symbol | Parameter | Status | Sweep range or fixed value | Number of candidates | Selected value | Calibration objective |
 |---|:---:|---|---|---|---:|---:|---|
