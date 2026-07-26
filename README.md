@@ -69,7 +69,7 @@ Previously calibrated parameters are held fixed when the next stage is evaluated
 |---|---:|---|
 | Initial agents | 1,500 | Initial synthetic justice-system population |
 | Warm-up period | 144 months | Establishes a stable pre-study population |
-| Fixed monthly intake | 100 agents/month | Equal to 10% of the original 1,000-agent design; not compounded growth |
+| Fixed monthly intake | 150 agents/month | Equal to 10% of the original 1,500-agent design; not compounded growth |
 | Approximate end-of-warm-up population | 23,000 agents | Includes initial agents and fixed monthly inflow before exits |
 | Study cohort | Approximately 5,000 eligible agents | Agents in Free or Supervision states retained after warm-up |
 | Study period | 108 months | Matches the 9-year BJS follow-up |
