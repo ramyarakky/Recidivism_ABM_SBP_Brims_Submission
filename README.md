@@ -2,7 +2,7 @@
 
 **Paper:** *An Agent-Based Model of Recidivism*  
 **Conference:** SBP-BRiMS 2026 — Social, Cultural, and Behavioral Modeling  
-**Authors:** Ramya Rakkiappan and Dr Hamdi Kavak  
+**Authors:** Ramya Rakkiappan and Dr. Hamdi Kavak  
 **Institution:** George Mason University  
 
 ---
