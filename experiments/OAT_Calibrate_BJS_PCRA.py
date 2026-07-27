@@ -412,15 +412,19 @@ def _worker(task):
             r = model.calculate_flag_rate(f"rearrest_{yrs}_yrs")
             rates[yrs] = r if r is not None else 0.0
 
-        # Per-tier 3yr rates
+        # Per-tier rates at 3, 6, and 9 years
         tier_r = {}
         for tier in TIERS:
             agents_t = [a for a in eligible if a.get_pcra_tier() == tier]
             nt = len(agents_t)
-            tier_r[tier] = (
-                sum(1 for a in agents_t if getattr(a, "rearrest_3_yrs", False)) / nt
-                if nt > 0 else 0.0
-            )
+            for yr in [3, 6, 9]:
+                tier_r[f"{tier}_{yr}"] = (
+                    sum(1 for a in agents_t
+                        if getattr(a, f"rearrest_{yr}_yrs", False)) / nt
+                    if nt > 0 else 0.0
+                )
+            # Backward-compatible scalar key (3yr) for existing chart functions
+            tier_r[tier] = tier_r[f"{tier}_3"]
 
         # Tier composition
         tier_share = {}
@@ -670,6 +674,10 @@ def run_replicated(overrides, n_workers, label="run"):
     for off in OFFENSES:
         for yrs in [3, 6, 9]:
             raw[f"off_{off}_{yrs}"] = []
+    # Per-tier rates at 6 and 9 years (3yr already in raw[tier])
+    for _t in TIERS:
+        for _yr in [6, 9]:
+            raw[f"{_t}_{_yr}"] = []
 
     per_seed_rows = []
 
@@ -688,6 +696,8 @@ def run_replicated(overrides, n_workers, label="run"):
                 for t in TIERS:
                     raw[t].append(r["tier_r"][t])
                     raw[f"share_{t}"].append(r["tier_share"][t])
+                    for yr in [6, 9]:
+                        raw[f"{t}_{yr}"].append(r["tier_r"].get(f"{t}_{yr}", 0.))
                 for off in OFFENSES:
                     for yrs in [3, 6, 9]:
                         raw[f"off_{off}_{yrs}"].append(r["offense"][(off, yrs)])
@@ -752,6 +762,10 @@ def run_replicated(overrides, n_workers, label="run"):
         arr_s = np.array(raw[f"share_{t}"])
         out[f"tier_3yr_{t}"]   = float(arr.mean())   if len(arr)   else 0.
         out[f"tier_share_{t}"] = float(arr_s.mean()) if len(arr_s) else 0.
+        # Per-tier 6yr and 9yr rates
+        for yr in [6, 9]:
+            arr_yr = np.array(raw[f"{t}_{yr}"])
+            out[f"tier_{yr}yr_{t}"] = float(arr_yr.mean()) if len(arr_yr) else 0.
     # STAGE 3 — aggregate per-offense means
     for off in OFFENSES:
         for yrs in [3, 6, 9]:
@@ -2478,6 +2492,200 @@ def plot_equifinality_single_panel(baseline_tier, calibrated_tier,
     plt.close()
     print(f"  Equifinality single-panel chart -> {path}")
 
+def plot_equifinality_three_windows(baseline_tier, calibrated_tier,
+                                     cal_params, outdir,
+                                     filename="equifinality_3windows.png"):
+    """
+    Three-panel grouped bar chart: Uncalibrated vs Calibrated vs PCRA target
+    across 3-year, 6-year, and 9-year windows.
+
+    Parameters
+    ----------
+    baseline_tier   : {tier_key: {3: rate, 6: rate, 9: rate}}
+                      Uncalibrated run results per tier per window.
+                      Also accepts {tier_key: scalar} for 3yr-only fallback.
+    calibrated_tier : {tier_key: {3: rate, 6: rate, 9: rate}}
+                      Final calibrated run results per tier per window.
+    cal_params      : dict
+                      Locked parameter dict — used to read γ for the label.
+    outdir          : str
+                      Output directory (must already exist).
+    filename        : str
+                      Output filename inside outdir.
+
+    Dissertation use
+    ----------------
+    Extends plot_equifinality_single_panel() to confirm that γ identifies
+    tier spread at all three follow-up windows (3/6/9yr), not just 3yr.
+    Source: Johnson (2023), Federal Probation 87(2), Table 6.
+    """
+    gamma_val   = cal_params.get("Risk_Contrast_Strength", 1.0)
+    gamma_label = f"γ = {gamma_val:.3f}"
+    windows     = [3, 6, 9]
+    window_lbls = ["3-Year", "6-Year", "9-Year"]
+
+    # ── Helper: extract rate for a tier and window ────────────────────────────
+    def _get(data, tier, yr):
+        val = data.get(tier, {})
+        if isinstance(val, dict):
+            return float(val.get(yr, 0.0))
+        # scalar fallback — only valid for 3yr
+        return float(val) if yr == 3 else 0.0
+
+    # ── Figure layout ─────────────────────────────────────────────────────────
+    fig = plt.figure(figsize=(18, 6))
+    fig.patch.set_facecolor("white")
+
+    gs = gridspec.GridSpec(
+        1, 3,
+        figure=fig,
+        wspace=0.06,
+        left=0.06, right=0.97,
+        top=0.82, bottom=0.14,
+    )
+    axes = [fig.add_subplot(gs[0, i]) for i in range(3)]
+
+    x       = np.arange(len(TIERS))
+    w       = 0.24
+    offsets = [-w, 0.0, w]
+
+    legend_handles = []
+    legend_labels  = []
+
+    for col, (ax, yr, wlbl) in enumerate(zip(axes, windows, window_lbls)):
+
+        uncal_vals = [_get(baseline_tier,   t, yr) for t in TIERS]
+        cal_vals   = [_get(calibrated_tier, t, yr) for t in TIERS]
+        tgt_vals   = [PCRA_TARGETS[t][yr]          for t in TIERS]
+
+        bar_specs = [
+            (offsets[0], uncal_vals, C["baseline"],   "Uncalibrated  γ = 0.0"),
+            (offsets[1], cal_vals,   C["calibrated"], f"Calibrated  {gamma_label}"),
+            (offsets[2], tgt_vals,   C["bjs"],        "PCRA empirical target"),
+        ]
+
+        for off, vals, colour, label in bar_specs:
+            bars = ax.bar(
+                x + off, vals,
+                width=w,
+                color=colour,
+                edgecolor="white",
+                linewidth=0.8,
+                label=label,
+                zorder=3,
+            )
+            for bar, val in zip(bars, vals):
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() + 0.013,
+                    f"{val:.1%}",
+                    ha="center", va="bottom",
+                    fontsize=7.5, fontweight="bold",
+                    color=colour,
+                )
+
+        # Per-tier Δ annotation (calibrated vs PCRA target)
+        for i, (cv, tv) in enumerate(zip(cal_vals, tgt_vals)):
+            gap_pp = (cv - tv) * 100
+            clr = (
+                "#27AE60" if abs(gap_pp) <= 2 else
+                "#F39C12" if abs(gap_pp) <= 5 else
+                "#E74C3C"
+            )
+            ax.text(
+                x[i] + offsets[1],
+                max(cv, tv) + 0.072,
+                f"Δ {gap_pp:+.1f} pp",
+                ha="center", va="bottom",
+                fontsize=7.5, fontweight="bold",
+                color=clr,
+            )
+
+        # MAE summary box — top-right of each panel
+        mae_cal  = float(np.mean([abs(c - t) for c, t in zip(cal_vals,   tgt_vals)]))
+        mae_base = float(np.mean([abs(u - t) for u, t in zip(uncal_vals, tgt_vals)]))
+        ax.text(
+            0.98, 0.97,
+            f"Calibrated MAE: {mae_cal  * 100:.2f} pp\n"
+            f"Baseline MAE:   {mae_base * 100:.2f} pp",
+            transform=ax.transAxes, ha="right", va="top",
+            fontsize=7.5, family="monospace", color="#333333",
+            bbox=dict(boxstyle="round,pad=0.35", facecolor="white",
+                      edgecolor="#CCCCCC", alpha=0.93, linewidth=1.0),
+        )
+
+        # ── Axes formatting ───────────────────────────────────────────────────
+        ax.set_xticks(x)
+        ax.set_xticklabels(TIERS_LB, fontsize=9.5, rotation=15, ha="right")
+        ax.set_xlim(-0.55, len(TIERS) - 0.45)
+        ax.set_ylim(0, 1.24)
+        ax.yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
+        ax.tick_params(labelsize=9)
+        ax.grid(True, axis="y", color=C["grid"],
+                linewidth=0.6, linestyle="--", zorder=0)
+        ax.set_axisbelow(True)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.set_title(wlbl, fontsize=12, fontweight="bold", pad=8)
+
+        if col == 0:
+            ax.set_ylabel(
+                "Cumulative rearrest rate (%)",
+                fontsize=10, labelpad=6,
+            )
+            legend_handles, legend_labels = ax.get_legend_handles_labels()
+        else:
+            ax.set_yticklabels([])
+            ax.tick_params(axis="y", length=0)
+
+    # ── Shared figure title ───────────────────────────────────────────────────
+    fig.suptitle(
+        "Before vs. After Stage 2 Calibration:\n"
+        "PCRA Risk-Tier-Stratified Rearrest Rates  |  "
+        "3-Year, 6-Year, 9-Year Windows",
+        fontsize=13, fontweight="bold", y=0.98,
+    )
+
+    # ── Shared legend ─────────────────────────────────────────────────────────
+    fig.legend(
+        legend_handles, legend_labels,
+        loc="lower center",
+        ncol=3,
+        fontsize=10,
+        frameon=True, framealpha=0.92,
+        edgecolor="#CCCCCC",
+        bbox_to_anchor=(0.5, 0.01),
+    )
+
+    # ── Delta colour key ──────────────────────────────────────────────────────
+    #fig.text(
+    #    0.97, 0.02,
+    #    "Δ colour:  ■ ≤2pp (green)   ■ ≤5pp (amber)   ■ >5pp (red)",
+    #    ha="right", va="bottom",
+    #    fontsize=8, color="#555555", style="italic",
+    #)
+
+    # ── Source footnote ───────────────────────────────────────────────────────
+    #fig.text(
+    #    0.03, 0.02,
+    #    f"Source: Johnson (2023), Federal Probation 87(2), Table 6  |  "
+    #    f"Calibrated {gamma_label}  |  BJS NCJ 250975",
+    #    ha="left", va="bottom",
+    #    fontsize=8, color="#555555", style="italic",
+    #)
+
+    path = os.path.join(outdir, filename)
+    plt.savefig(
+        path, dpi=150,
+        bbox_inches="tight",
+        facecolor="white",
+        edgecolor="white",
+    )
+    plt.close()
+    print(f"  Equifinality three-window chart -> {path}")
+    return path
+
+
 def plot_threeway_rate_comparison(baseline_rates, calibrated_rates, outdir,
                                    filename="CalibrationSummary.png"):
     """
@@ -2603,6 +2811,204 @@ def plot_all_tier_charts(baseline_res, calibrated_res, calibrated_rates,
 
 
 # =============================================================================
+# STAGE 1 TIER SEPARATION CHART
+# Shows PCRA tier rates at END of Stage 1 (γ=0) vs calibrated γ vs PCRA target
+# across 3, 6, and 9 year windows. Demonstrates γ's contribution visually.
+# =============================================================================
+def plot_stage1_tier_separation(stage1_res, calibrated_tier,
+                                 cal_params, outdir,
+                                 filename="tier_stage1_separation.png"):
+    """
+    Three-panel chart: Stage 1 complete (γ=0) vs Calibrated γ vs PCRA target
+    across 3-year, 6-year, and 9-year windows.
+
+    At Stage 1 end, Risk_Contrast_Strength = 0 — all tiers sit at the
+    population mean because the tier-contrast term adds zero log-odds to
+    every agent. Calibrated bars (γ>0) spread correctly around that mean.
+
+    Parameters
+    ----------
+    stage1_res      : dict from run_replicated() with γ=0 locked.
+                      Must contain tier_3yr_{t}, tier_6yr_{t}, tier_9yr_{t}.
+    calibrated_tier : dict {tier: {3: rate, 6: rate, 9: rate}} or
+                      {tier: scalar} — fully calibrated tier rates.
+    cal_params      : locked parameter dict (reads Risk_Contrast_Strength).
+    outdir          : output directory.
+    filename        : output filename.
+
+    Source
+    ------
+    Johnson (2023), Federal Probation 87(2), Table 6.
+    """
+    gamma_val    = float(cal_params.get("Risk_Contrast_Strength", 1.0))
+    gamma_label  = f"γ = {gamma_val:.3f}"
+    tier_colours = [C[t] for t in TIERS]
+
+    def _s1(tier, yr):
+        # Try exact per-tier per-window key first
+        key = f"tier_{yr}yr_{tier}"
+        if key in stage1_res:
+            return float(stage1_res[key])
+        # Fallback: aggregate rate at this window (γ=0 → all tiers ≈ mean)
+        return float(stage1_res.get(yr, 0.0))
+
+    def _cal(tier, yr):
+        val = calibrated_tier.get(tier, {})
+        if isinstance(val, dict):
+            return float(val.get(yr, 0.0))
+        # Scalar fallback — use PCRA ratio to infer 6/9yr from 3yr
+        rate_3 = float(val)
+        if yr == 3:
+            return rate_3
+        tgt_3  = PCRA_TARGETS[tier][3]
+        tgt_yr = PCRA_TARGETS[tier][yr]
+        ratio  = tgt_yr / tgt_3 if tgt_3 > 0 else 1.0
+        return min(rate_3 * ratio, 0.999)
+
+    fig = plt.figure(figsize=(20, 7))
+    fig.patch.set_facecolor("white")
+    gs = gridspec.GridSpec(1, 3, figure=fig, wspace=0.06,
+                            left=0.06, right=0.97, top=0.80, bottom=0.16)
+    axes      = [fig.add_subplot(gs[0, i]) for i in range(3)]
+    x         = np.arange(len(TIERS))
+    w         = 0.24
+    offsets   = [-w, 0.0, w]
+    leg_hands = []
+
+    for col, (ax, yr, wlbl) in enumerate(zip(axes, WINDOWS, WIN_LB)):
+
+        s1_vals  = [_s1(t, yr)  for t in TIERS]
+        cal_vals = [_cal(t, yr) for t in TIERS]
+        tgt_vals = [PCRA_TARGETS[t][yr] for t in TIERS]
+
+        # State A — Stage 1 flat bars (steel blue)
+        bars_s1 = ax.bar(x + offsets[0], s1_vals, width=w,
+                         color="#5B8DB8", edgecolor="white",
+                         linewidth=0.8, alpha=0.82, zorder=3)
+        for bar, val in zip(bars_s1, s1_vals):
+            ax.text(bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() + 0.012, f"{val:.1%}",
+                    ha="center", va="bottom",
+                    fontsize=7.5, fontweight="bold", color="#5B8DB8")
+
+        # State B — calibrated bars (per-tier colours)
+        bars_cal = ax.bar(x + offsets[1], cal_vals, width=w,
+                          color=tier_colours, edgecolor="white",
+                          linewidth=0.8, alpha=0.92, zorder=3)
+        for bar, val in zip(bars_cal, cal_vals):
+            ax.text(bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() + 0.012, f"{val:.1%}",
+                    ha="center", va="bottom",
+                    fontsize=7.5, fontweight="bold", color="#333333")
+
+        # State C — PCRA target bars
+        bars_tgt = ax.bar(x + offsets[2], tgt_vals, width=w,
+                          color=C["bjs"], edgecolor="white",
+                          linewidth=0.8, alpha=0.78, zorder=3)
+        for bar, val in zip(bars_tgt, tgt_vals):
+            ax.text(bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() + 0.012, f"{val:.1%}",
+                    ha="center", va="bottom",
+                    fontsize=7.5, fontweight="bold", color=C["bjs"])
+
+        # Arrows: Stage 1 → Calibrated (γ effect)
+        for i, (s1, cv) in enumerate(zip(s1_vals, cal_vals)):
+            delta = cv - s1
+            if abs(delta) > 0.008:
+                clr = "#27AE60" if delta > 0 else "#C0392B"
+                ax.annotate("",
+                    xy    =(x[i] + offsets[1], cv + 0.006),
+                    xytext=(x[i] + offsets[0], s1 + 0.006),
+                    arrowprops=dict(arrowstyle="-|>", color=clr,
+                                    lw=1.4, mutation_scale=10))
+
+        # Δ annotation: calibrated vs PCRA target
+        for i, (cv, tv) in enumerate(zip(cal_vals, tgt_vals)):
+            gap_pp = (cv - tv) * 100
+            clr = ("#27AE60" if abs(gap_pp) <= 2 else
+                   "#F39C12" if abs(gap_pp) <= 5 else "#E74C3C")
+            ax.text(x[i] + offsets[1], max(cv, tv) + 0.076,
+                    f"Δ {gap_pp:+.1f} pp",
+                    ha="center", va="bottom",
+                    fontsize=7.5, fontweight="bold", color=clr)
+
+        # MAE box
+        mae_s1  = float(np.mean([abs(s - t) for s, t in zip(s1_vals,  tgt_vals)]))
+        mae_cal = float(np.mean([abs(c - t) for c, t in zip(cal_vals, tgt_vals)]))
+        red     = ((mae_s1 - mae_cal) / mae_s1 * 100) if mae_s1 > 0 else 0.0
+        ax.text(0.98, 0.97,
+                f"Stage 1 MAE: {mae_s1  * 100:.2f} pp\n"
+                f"Cal    MAE: {mae_cal * 100:.2f} pp\n"
+                f"Reduction:  {red:+.1f}%",
+                transform=ax.transAxes, ha="right", va="top",
+                fontsize=7.5, family="monospace", color="#333333",
+                bbox=dict(boxstyle="round,pad=0.35", facecolor="white",
+                          edgecolor="#CCCCCC", alpha=0.93, linewidth=1.0))
+
+        # Aggregate line — Stage 1 population mean
+        agg = float(stage1_res.get(yr, 0.))
+        if agg > 0:
+            ax.axhline(agg, color="#5B8DB8", linewidth=1.2,
+                       linestyle=":", alpha=0.7, zorder=2)
+
+        # Axes formatting
+        ax.set_xticks(x)
+        ax.set_xticklabels(TIERS_LB, fontsize=9.5, rotation=15, ha="right")
+        ax.set_xlim(-0.55, len(TIERS) - 0.45)
+        ax.set_ylim(0, 1.28)
+        ax.yaxis.set_major_formatter(PercentFormatter(xmax=1.0))
+        ax.tick_params(labelsize=9)
+        ax.grid(True, axis="y", color=C["grid"],
+                linewidth=0.6, linestyle="--", zorder=0)
+        ax.set_axisbelow(True)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.set_title(wlbl, fontsize=12, fontweight="bold", pad=8)
+
+        if col == 0:
+            ax.set_ylabel("Cumulative rearrest rate (%)",
+                          fontsize=10, labelpad=6)
+            leg_hands = [
+                Patch(facecolor="#5B8DB8", alpha=0.82,
+                      label="Stage 1 complete  (γ = 0 — all tiers at population mean)"),
+                Patch(facecolor=C["calibrated"], alpha=0.92,
+                      label=f"Stage 2 calibrated  ({gamma_label} — tier spread restored)"),
+                Patch(facecolor=C["bjs"], alpha=0.78,
+                      label="PCRA empirical target  "
+                            "(Johnson, 2023, Federal Probation 87(2), Table 6)"),
+            ]
+        else:
+            ax.set_yticklabels([])
+            ax.tick_params(axis="y", length=0)
+
+    fig.suptitle(
+        "PCRA Risk-Tier Rearrest Rates: End of Stage 1 (γ = 0) → Stage 2 Calibrated\n"
+        f"Stage 1 bars show actual simulated rates with γ = 0  |  "
+        f"Calibrated bars show tier spread with {gamma_label}  |  "
+        "Across 3-Year, 6-Year, and 9-Year Windows",
+        fontsize=12, fontweight="bold", y=0.99,
+    )
+    fig.legend(handles=leg_hands, loc="lower center", ncol=3,
+               fontsize=9.5, frameon=True, framealpha=0.92,
+               edgecolor="#CCCCCC", bbox_to_anchor=(0.5, 0.01))
+    fig.text(0.03, 0.02,
+             "Stage 1 bars are flat because γ = 0 adds zero log-odds to every agent — "
+             "Low and High risk agents draw from the same hazard. "
+             "Arrows show γ effect direction and magnitude per tier.",
+             ha="left", va="bottom", fontsize=8, color="#555555", style="italic")
+    fig.text(0.97, 0.02,
+             "Δ colour:  ■ ≤2pp (green)   ■ ≤5pp (amber)   ■ >5pp (red)",
+             ha="right", va="bottom", fontsize=8, color="#555555", style="italic")
+
+    path = os.path.join(outdir, filename)
+    plt.savefig(path, dpi=150, bbox_inches="tight",
+                facecolor="white", edgecolor="white")
+    plt.close()
+    print(f"  Stage 1 tier separation chart -> {path}")
+    return path
+
+
+# =============================================================================
 # MAIN
 # STAGE 3 — locked dict handles nested offense_hazard_shift keys
 # =============================================================================
@@ -2698,6 +3104,19 @@ def main(n_workers, force_rerun=False):
         calibrated[param] = opt
         _apply_param(locked, param, opt)
 
+        # ── Capture Stage 1 snapshot after ds6 is locked ─────────────────────
+        # γ is still 0 at this point — tier rates are flat at population mean.
+        # Saved to stage1_snapshot.json for replot() and standalone chart tools.
+        if step["symbol"] == "ds6":
+            print(f"  Capturing Stage 1 completion snapshot (γ=0)...")
+            stage1_res = _norm(run_replicated(locked, n_workers, label="stage1"))
+            sj = os.path.join(outdir, "stage1_snapshot.json")
+            with open(sj, "w") as f: json.dump(stage1_res, f, indent=2)
+            print(f"  Stage 1 snapshot -> {sj}")
+            print(f"  Stage 1 tiers (γ=0):  " +
+                  "  ".join(f"{t}={stage1_res.get(f'tier_3yr_{t}', 0.):.1%}"
+                            for t in TIERS))
+
         plot_sweep(df, step, opt, baseline_rates, outdir)
         if step["loss"] == "gamma":
             plot_tier_sweep(df, step, opt, outdir)
@@ -2744,8 +3163,52 @@ def main(n_workers, force_rerun=False):
         cal_params      = locked,
         outdir          = outdir,
     )
+    plot_equifinality_three_windows(
+        baseline_tier={
+            t: {
+                3: baseline_res.get(f"tier_3yr_{t}", 0.),
+                6: baseline_res.get(f"tier_6yr_{t}",
+                   baseline_res.get(f"tier_3yr_{t}", 0.)),
+                9: baseline_res.get(f"tier_9yr_{t}",
+                   baseline_res.get(f"tier_3yr_{t}", 0.)),
+            }
+            for t in TIERS
+        },
+        calibrated_tier={
+            t: {
+                3: final_res.get(f"tier_3yr_{t}", 0.),
+                6: final_res.get(f"tier_6yr_{t}",
+                   final_res.get(f"tier_3yr_{t}", 0.)),
+                9: final_res.get(f"tier_9yr_{t}",
+                   final_res.get(f"tier_3yr_{t}", 0.)),
+            }
+            for t in TIERS
+        },
+        cal_params=locked,
+        outdir=outdir,
+    )
     # STAGE 3 — per-offense validation chart
     plot_offense_validation(baseline_res, final_res, outdir)
+
+    # ── Stage 1 tier separation chart ─────────────────────────────────────────
+    # Shows tier rates at end of Stage 1 (γ=0) vs calibrated γ vs PCRA targets
+    # across 3, 6, and 9 year windows. Requires stage1_res captured after ds6.
+    sj = os.path.join(outdir, "stage1_snapshot.json")
+    if os.path.exists(sj):
+        with open(sj) as f: _s1 = _norm(json.load(f))
+        plot_stage1_tier_separation(
+            stage1_res      = _s1,
+            calibrated_tier = {
+                t: {
+                    3: final_res.get(f"tier_3yr_{t}", 0.),
+                    6: final_res.get(f"tier_6yr_{t}", 0.),
+                    9: final_res.get(f"tier_9yr_{t}", 0.),
+                }
+                for t in TIERS
+            },
+            cal_params = locked,
+            outdir     = outdir,
+        )
 
     plot_seed_mcse(final_res, outdir)
     plot_seed_convergence(final_res, outdir)
@@ -2771,6 +3234,22 @@ def main(n_workers, force_rerun=False):
                                for y in [3, 6, 9]},
         "calibrated_tier":   {t: final_res.get(f"tier_3yr_{t}", 0.)    for t in TIERS},
         "calibrated_share":  {t: final_res.get(f"tier_share_{t}", 0.)  for t in TIERS},
+        # Per-tier rates at all three windows — used by plot_stage1_tier_separation
+        "calibrated_tier_all_windows": {
+            t: {
+                yr: final_res.get(f"tier_{yr}yr_{t}", 0.)
+                for yr in [3, 6, 9]
+            }
+            for t in TIERS
+        },
+        # Stage 1 snapshot tier rates (γ=0) — saved if ds6 was swept this run
+        "stage1_tier": {
+            t: {
+                yr: stage1_res.get(f"tier_{yr}yr_{t}", 0.)
+                for yr in [3, 6, 9]
+            }
+            for t in TIERS
+        } if "stage1_res" in dir() else {},
         # STAGE 3 — save per-offense baseline and calibrated rates
         "baseline_offense": {
             off: {y: baseline_res.get(f"off_{off}_{y}yr", 0.) for y in WINDOWS}
@@ -2900,6 +3379,66 @@ def replot(outdir=None):
             cal_params      = cal,
             outdir          = outdir,
         )
+        plot_equifinality_three_windows(
+            baseline_tier={
+                t: {
+                    3: b_tier.get(t, 0.),
+                    6: rec.get("baseline_tier_6yr", {}).get(t,
+                       b_tier.get(t, 0.)),
+                    9: rec.get("baseline_tier_9yr", {}).get(t,
+                       b_tier.get(t, 0.)),
+                }
+                for t in TIERS
+            },
+            calibrated_tier={
+                t: {
+                    3: c_tier.get(t, 0.),
+                    6: rec.get("calibrated_tier_6yr", {}).get(t,
+                       c_tier.get(t, 0.)),
+                    9: rec.get("calibrated_tier_9yr", {}).get(t,
+                       c_tier.get(t, 0.)),
+                }
+                for t in TIERS
+            },
+            cal_params=cal,
+            outdir=outdir,
+        )
+
+        # ── Stage 1 tier separation chart ─────────────────────────────────────
+        # Reads stage1_snapshot.json if present; falls back to stage1_tier in JSON
+        sj = os.path.join(outdir, "stage1_snapshot.json")
+        _s1_data = None
+        if os.path.exists(sj):
+            with open(sj) as f: _s1_data = _norm(json.load(f))
+        elif rec.get("stage1_tier"):
+            # Reconstruct from recommended_params.json
+            st = rec["stage1_tier"]
+            _s1_data = {}
+            for t in TIERS:
+                for yr in [3, 6, 9]:
+                    _s1_data[f"tier_{yr}yr_{t}"] = st.get(t, {}).get(str(yr), 0.)
+            # Aggregate rates from calibrated_rates (Stage 1 mean ≈ calibrated mean)
+            for yr in [3, 6, 9]:
+                _s1_data[yr] = float(rec.get("calibrated_rates", {}).get(str(yr), 0.))
+
+        if _s1_data:
+            c_tier_all = rec.get("calibrated_tier_all_windows", {})
+            plot_stage1_tier_separation(
+                stage1_res      = _s1_data,
+                calibrated_tier = {
+                    t: {
+                        yr: c_tier_all.get(t, {}).get(str(yr),
+                            c_tier.get(t, 0.))
+                        for yr in [3, 6, 9]
+                    }
+                    for t in TIERS
+                },
+                cal_params = cal,
+                outdir     = outdir,
+            )
+        else:
+            print("  [skip] stage1_snapshot.json not found — "
+                  "run calibration to generate it")
 
     b_share_fixed = {f"tier_share_{t}": rec.get("baseline_share", {}).get(t, 0.) for t in TIERS}
     c_share_fixed = {f"tier_share_{t}": rec.get("calibrated_share", {}).get(t, 0.) for t in TIERS}

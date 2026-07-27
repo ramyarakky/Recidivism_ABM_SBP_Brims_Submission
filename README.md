@@ -1,339 +1,313 @@
-## Table of Contents
+# Recidivism ABM — SBP-BRiMS 2026 Calibration
 
-- Overview
-- Model Configuration
-- Three-Stage Calibration
-- Full Parameter Summary
-- Output Files
-- Running the Code
-- Dependencies
-- References
-- Citation
-
-# Recidivism ABM — Phase 1: Three-Stage OAT Calibration
-
-**Project:** An Agent-Based Model of Recidivism and Fairness  
+**Paper:** *An Agent-Based Model of Recidivism*  
 **Conference:** SBP-BRiMS 2026 — Social, Cultural, and Behavioral Modeling  
-**Author:** Ramya Rakkiappan, PhD Candidate, Computational Science, George Mason University  
-**Supervisor:** Dr. Hamdi Kavak  
+**Authors:** Ramya Rakkiappan and Hamdi Kavak  
+**Institution:** George Mason University  
+
+---
+
+# Table of Contents
+
+- [Overview](#overview)
+- [SBP-BRiMS Model Configuration](#sbp-brims-model-configuration)
+- [Calibration Procedure](#calibration-procedure)
+- [Stage 1 — National Rearrest Calibration](#stage-1--national-rearrest-calibration)
+- [Stage 2 — PCRA Risk-Tier Calibration](#stage-2--pcra-risk-tier-calibration)
+- [Stage 3 — Offense-Type Calibration](#stage-3--offense-type-calibration)
+- [Complete SBP-BRiMS Calibration Summary](#complete-sbp-brims-calibration-summary)
+- [Sensitivity and Robustness Experiments](#sensitivity-and-robustness-experiments)
+- [Output Files](#output-files)
+- [Running the Calibration](#running-the-calibration)
+- [Dependencies](#dependencies)
+- [References](#references)
+- [Citation](#citation)
+
+---
+
+## Repository Structure
+
+```text
+Recidvism_ABM_SBP_Brims_Submission/
+├── README.md
+├── references.bib
+├── agents/person.py
+├── model/recidivism_model.py
+├── config/risk_config.py
+├── references.bib
+├── experiments/OAT_Calibrate_BJS_PCRA.py
+├── experiments/OAT_SensitivityAnalysis.py
+├── experiments/OAT_StressSimulation.py
+├── experiments/OAT_Calibrate_BJS_PCRA_Offense_Output/
+├── experiments/OAT_SensitivityAnalysis_Output/
+├── experiments/OAT_StressTest_Output/
+├── SBP_Images/
+└── requirements.txt
+```
 
 ---
 
 ## Overview
 
-Recidivism prediction models are widely deployed in United States criminal justice
-settings to inform supervision, parole, and sentencing decisions. Despite their
-influence, the internal mechanisms driving these predictions remain difficult to
-validate for fairness , particularly whether risk scores produce structurally
-equitable outcomes across demographic groups.
+This repository contains the agent-based model, calibration scripts, validation outputs, and figures used in the SBP-BRiMS 2026 paper *An Agent-Based Model of Recidivism*.
 
-This repository implements an **agent-based model (ABM)** of post-release recidivism
-in the U.S. justice system, developed as part of a PhD dissertation on algorithmic
-fairness at George Mason University. The model simulates the post-release trajectories
-of a synthetic cohort of formerly incarcerated individuals, capturing offender
-heterogeneity, supervision dynamics, peer influence, and criminal justice interventions
-under race and gender neutral baseline assumptions.
+The model represents post-release justice-system trajectories through four states: Trial, Prison, Supervision, and Free. It is calibrated under race- and gender-neutral assumptions to reproduce three empirical structures:
 
-### Why an Agent-Based Model?
+| Stage | Calibration structure | Empirical source | Parameters |
+|---|---|---|---|
+| 1 | National cumulative rearrest rates at 3, 6, and 9 years | Alper et al. (2018), BJS NCJ 250975 | `alpha`, `delta_s3`, `delta_s6` |
+| 2 | PCRA risk-tier cumulative rearrest rates at 3, 6, and 9 years | Johnson (2023), *Federal Probation* 87(2) | `gamma` |
+| 3 | Offense-specific cumulative rearrest rates at 3, 6, and 9 years | Alper et al. (2018), BJS NCJ 250975, Table 7 | `o_v`, `o_d`, `o_p`, `o_o` |
 
-Statistical recidivism models (e.g., logistic regression, gradient boosting) optimize
-for predictive accuracy but do not represent the mechanisms through which structural
-disparities emerge. An ABM allows explicit specification of those mechanisms such as
-supervision intensity, risk-tier assignment, offense trajectories by enabling
-counterfactual experiments that ask not just *who* reoffends but *why* the system
-produces the outcomes it does.
-
-### What Phase 1 Does
-
-Phase 1 establishes the **empirically calibrated baseline** model that reproduces
-known national and tier-stratified rearrest statistics before any bias is introduced.
-This baseline is essential: it ensures that any disparities observed in later phases
-are attributable to the mechanisms under study, not to a mis-specified starting point.
-
-Calibration proceeds in three sequential stages using one-at-a-time (OAT) parameter
-sweeps across 11 parameters (3 fixed, 8 estimated), validated against two independent
-empirical sources:
-
-- **BJS NCJ 250975** (Alper et al., 2018) — national aggregate and per-offense
-  rearrest rates at 3, 6, and 9 years post-release
-- **Federal Probation 87(2)** (Johnson, 2023) — PCRA risk-tier-stratified rearrest
-  rates for Low, Low-Moderate, Moderate, and High risk groups
-
-The three stages proceed in a fixed order — each stage locks its parameters before
-the next begins:
-
-```
-Stage 1 → BJS National Aggregate      (α, δ_s3, δ_s6 + 3 fixed desistance ratios)
-Stage 2 → PCRA Tier-Stratified        (γ — risk contrast strength)
-Stage 3 → BJS Per-Offense Rearrest    (o_v, o_d, o_p, o_o — offense hazard shifts)
-```
-
-The calibrated model achieves a mean absolute error (MAE) below 2.5 percentage points
-across all follow-up windows, providing a validated foundation for fairness assessment
-in subsequent phases.
-
-### Dissertation Context
-
-| Phase | Focus | Status |
-|-------|-------|--------|
-| Phase 1 | Empirical calibration — this repository | ✅ Complete |
-| Phase 2 | Bias injection — structural disparities by race and gender | 🔄 In progress |
-| Phase 3 | Fairness interventions and counterfactual analysis | 🔲 Future work |
+Previously calibrated parameters are held fixed when the next stage is evaluated. This sequential one-at-a-time grid-search design narrows the set of parameter configurations consistent with the selected empirical targets, while higher-order interactions remain outside the scope of the conference paper.
 
 ---
 
-## Model Configuration
+## SBP-BRiMS Model Configuration
 
-| Parameter | Value |
-|-----------|-------|
-| Initial agents | 3,000 |
-| Warm-up period | 144 months (12 years) |
-| Study period | 108 months (9 years) |
-| Monthly intake | 10 agents |
-| Peer influence | Enabled |
-| Mode | Realistic |
-| Bias factor | 0.0 (Phase 1 — no bias injected) |
-| Runs per sweep point | 100 simulations |
-
----
-## Reproducibility
-
-The calibration follows a sequential three-stage one-at-a-time (OAT) grid-search procedure.
-
-At each stage:
-
-- previously calibrated parameters remain fixed;
-- candidate values are evaluated over predefined search ranges;
-- each candidate value is evaluated using 10 replications across 10 random seeds (100 stochastic simulations); and
-- the parameter value minimizing the stage-specific loss function is selected before proceeding to the next stage.
-
-This repository contains the complete calibration scripts, parameter search ranges, selected values, output files, and figures required to reproduce the calibration results reported in the SBP-BRiMS 2026 paper.
-
----
-## Three-Stage Calibration
-
-### Stage 1 — BJS National Aggregate Calibration
-
-**Goal:** Match cumulative rearrest rates at 3, 6, and 9 years to BJS NCJ 250975.
-
-**What it does:** Calibrates supervision-related parameters governing how intensely
-agents are monitored after release and how that monitoring decays over time. Higher
-supervision intensity increases violation detection probability; decay multipliers
-reduce that intensity after years 3 and 6, reflecting empirically observed declines
-in supervision contact (Petersilia, 2003).
-
-**Calibration targets:**
-
-| Window | BJS Target | Source |
-|--------|-----------|--------|
-| 3-year | 68.4% | Alper et al. (2018), BJS NCJ 250975 |
-| 6-year | 79.4% | Alper et al. (2018), BJS NCJ 250975 |
-| 9-year | 83.4% | Alper et al. (2018), BJS NCJ 250975 |
-
-> **Diagnostic anchor (not a calibration target):** 1-year rate = 43.9%
-
-**Estimated parameters:**
-
-| Symbol | Parameter | Baseline | Calibrated | Sweep Range | Step |
-|--------|-----------|----------|------------|-------------|------|
-| α | Supervision Monitoring Intensity | 1.000 | **1.120** | [1.00, 1.20] | 0.02 |
-| δ_s3 | Supervision Decay — Years 3–6 | 1.000 | **0.990** | [0.60, 0.99] | ~0.032 |
-| δ_s6 | Supervision Decay — Years 6–9 | 1.000 | **0.400** | [0.20, 0.70] | 0.05 |
-
-**Fixed parameters (BJS-anchored, not estimated):**
-
-| Symbol | Parameter | Fixed Value | Derivation |
-|--------|-----------|-------------|------------|
-| dr1 | Desistance ratio — Years 1–3 | 0.524 | q₂₃/q₁ from BJS hazard decomposition |
-| dr3 | Desistance ratio — Years 3–6 | 0.500 | q₂/q₁ from BJS hazard decomposition |
-| dr6 | Desistance ratio — Years 6–9 | 0.508 | q₃/q₂ from BJS hazard decomposition |
-
-**Loss function:** Mean absolute error (MAE) across BJS aggregate targets at 3, 6,
-and 9 years. Each window is the primary loss target for its corresponding parameter
-(α → all three windows; δ_s3 → 6-year primary; δ_s6 → 9-year primary).
-
-**Stage 1 results:**
-
-| Window | Uncalibrated | Calibrated | BJS Target | MAE |
-|--------|-------------|------------|------------|-----|
-| 3-year | 65.8% | 70.2% | 68.4% | 0.018 |
-| 6-year | 78.0% | 79.9% | 79.4% | 0.005 |
-| 9-year | 80.8% | 81.5% | 83.4% | 0.019 |
+| Configuration item | SBP-BRiMS value | Role |
+|---|---:|---|
+| Initial agents | 1,500 | Initial synthetic justice-system population |
+| Warm-up period | 144 months | Establishes a stable pre-study population |
+| Fixed monthly intake | 150 agents/month | Equal to 10% of the original 1,500-agent design; not compounded growth |
+| Approximate end-of-warm-up population | 23,000 agents | Includes initial agents and fixed monthly inflow before exits |
+| Study cohort | Approximately 5,000 eligible agents | Agents in Free or Supervision states retained after warm-up |
+| Study period | 108 months | Matches the 9-year BJS follow-up |
+| Outcome checks | Quarterly | Rearrest hazard evaluated every three months |
+| Outcome definition | First rearrest | Absorbing measurement during the study period |
+| Peer influence | Enabled | Applied during incarceration |
+| Bias factor | 0.0 | Race- and gender-neutral baseline |
+| Replications per candidate value | 10 | Repeated stochastic runs |
+| Random seeds per replication | 10 | Common seed set |
+| Simulations per candidate value | 100 | 10 replications × 10 seeds |
 
 ---
 
-### Stage 2 — PCRA Tier-Stratified Calibration
+## Calibration Procedure
 
-**Goal:** Match 3-, 6-, and 9-year rearrest rates within each PCRA risk tier
-to Johnson (2023) Federal Probation empirical targets.
+| Step | Procedure |
+|---|---|
+| 1 | Select one candidate value from the parameter's predefined sweep. |
+| 2 | Run 10 replications across 10 random seeds, producing 100 simulations per candidate value. |
+| 3 | Compute the stage-specific mean absolute error. |
+| 4 | Select the candidate value with the minimum loss. |
+| 5 | Lock the selected value before proceeding to the next parameter or stage. |
 
-**What it does:** Introduces a risk-contrast parameter γ, which scales each agent's
-baseline hazard by sᵢ^γ, where sᵢ ∈ (0,1] is the agent's normalized PCRA score.
-At γ = 0 all tiers share identical hazard dynamics; increasing γ widens separation
-across tiers. Aggregate loss alone is insensitive to γ, as cross-tier errors cancel;
-tier-stratified calibration provides the necessary additional constraint.
+### Loss Functions
 
-**Calibration targets (3-year):**
+| Stage | Loss function | Number of target cells |
+|---|---|---:|
+| 1 | Mean absolute error across national 3-, 6-, and 9-year cumulative rearrest rates | 3 |
+| 2 | Mean absolute error across 4 PCRA tiers × 3 follow-up windows | 12 |
+| 3 | Mean absolute error across 4 offense groups × 3 follow-up windows | 12 |
 
-| PCRA Tier | Target | Source |
-|-----------|--------|--------|
-| Low | 46.2% | Johnson (2023), Federal Probation 87(2), Table 6 |
-| Low-Moderate | 72.0% | Johnson (2023), Federal Probation 87(2), Table 6 |
-| Moderate | 84.5% | Johnson (2023), Federal Probation 87(2), Table 6 |
-| High | 91.0% | Johnson (2023), Federal Probation 87(2), Table 6 |
+---
 
-**Estimated parameter:**
+# Stage 1 — National Rearrest Calibration
 
-| Symbol | Parameter | Baseline | Calibrated | Sweep Range | Step |
-|--------|-----------|----------|------------|-------------|------|
-| γ | Risk Contrast Strength | 0.000 | **1.000** | [0.75, 1.50] | 0.05 |
+## Stage 1 Targets
 
-**Loss function:** Mean absolute error across 12 cells (4 PCRA tiers × 3 follow-up
-windows: 3, 6, and 9 years post-release).
+| Follow-up window | BJS target | Calibration status | Source |
+|---|---:|---|---|
+| 1 year | 43.9% | Diagnostic only; not included in the loss | Alper et al. (2018) |
+| 3 years | 68.4% | Calibration target | Alper et al. (2018), BJS NCJ 250975 |
+| 6 years | 79.4% | Calibration target | Alper et al. (2018), BJS NCJ 250975 |
+| 9 years | 83.4% | Calibration target | Alper et al. (2018), BJS NCJ 250975 |
 
-**Stage 2 results (3-year, calibrated vs. target):**
+## Stage 1 Parameters and Sweeps
 
-| PCRA Tier | Uncalibrated | Calibrated | Target | Δ |
-|-----------|-------------|------------|--------|---|
+| Symbol | Code parameter | Meaning | Baseline | Sweep specification | Selected value | Primary target |
+|---|---|---|---:|---|---:|---|
+| α | `Supervision_Monitoring_Intensity` | Overall supervision monitoring intensity | 1.000 | 1.00–1.20; 11 values; step 0.02 | **1.120** | 3-, 6-, and 9-year aggregate MAE |
+| δ_s3 | `Supervision_Monitoring_Decay_After_3Y` | Supervision intensity multiplier during years 3–6 | 1.000 | 0.60–0.99; 13 values; step 0.0325 | **0.990** | 6-year aggregate error |
+| δ_s6 | `Supervision_Monitoring_Decay_After_6Y` | Supervision intensity multiplier during years 6–9 | 1.000 | 0.20–0.70; 11 values; step 0.05 | **0.400** | 9-year aggregate error |
+
+## Exact Stage 1 Sweep Values
+
+| Symbol | Candidate values |
+|---|---|
+| α | `1.000, 1.020, 1.040, 1.060, 1.080, 1.100, 1.120, 1.140, 1.160, 1.180, 1.200` |
+| δ_s3 | `0.6000, 0.6325, 0.6650, 0.6975, 0.7300, 0.7625, 0.7950, 0.8275, 0.8600, 0.8925, 0.9250, 0.9575, 0.9900` |
+| δ_s6 | `0.200, 0.250, 0.300, 0.350, 0.400, 0.450, 0.500, 0.550, 0.600, 0.650, 0.700` |
+
+## Fixed BJS-Anchored Desistance Parameters
+
+| Symbol | Code parameter | Period | Search status | Fixed value | Derivation |
+|---|---|---|---|---:|---|
+| dr1 | `Risk_Effect_Decay_After_1Y` | Years 1–3 | Not swept | **0.524** | BJS quarterly-hazard decomposition |
+| dr3 | `Risk_Effect_Decay_After_3Y` | Years 3–6 | Not swept | **0.500** | BJS quarterly-hazard decomposition |
+| dr6 | `Risk_Effect_Decay_After_6Y` | Years 6–9 | Not swept | **0.508** | BJS quarterly-hazard decomposition |
+
+## Stage 1 Aggregate Results
+
+| Follow-up window | Uncalibrated model | Calibrated model | BJS target | Absolute error |
+|---|---:|---:|---:|---:|
+| 3 years | 65.8% | 70.2% | 68.4% | 1.8 pp |
+| 6 years | 78.0% | 79.9% | 79.4% | 0.5 pp |
+| 9 years | 80.8% | 81.5% | 83.4% | 1.9 pp |
+
+---
+
+# Stage 2 — PCRA Risk-Tier Calibration
+
+The risk-contrast parameter scales the fixed log-odds contrast associated with each PCRA tier:
+
+`gamma × c_tier`
+
+It does **not** exponentiate the individual normalized risk score. When `gamma = 0`, the tier contrasts are removed. Increasing `gamma` widens the separation among tier-specific rearrest hazards.
+
+## Stage 2 Targets
+
+| PCRA tier | 3-year target | 6-year target | 9-year target | Source |
+|---|---:|---:|---:|---|
+| Low | 46.2% | 61.4% | 67.6% | Johnson (2023), *Federal Probation* 87(2), Table 6 |
+| Low-Moderate | 72.0% | 84.3% | 88.8% | Johnson (2023), *Federal Probation* 87(2), Table 6 |
+| Moderate | 84.5% | 92.1% | 94.6% | Johnson (2023), *Federal Probation* 87(2), Table 6 |
+| High | 91.0% | 95.0% | 95.0% | Johnson (2023), *Federal Probation* 87(2), Table 6 |
+
+## Stage 2 Parameter and Sweep
+
+| Symbol | Code parameter | Meaning | Baseline | Sweep specification | Selected value | Loss |
+|---|---|---|---:|---|---:|---|
+| γ | `Risk_Contrast_Strength` | Multiplier on fixed PCRA tier log-odds contrasts | 0.000 | 0.75–1.50; 16 values; step 0.05 | **1.000** | MAE across 12 tier × window cells |
+
+## Exact Stage 2 Sweep Values
+
+| Symbol | Candidate values |
+|---|---|
+| γ | `0.75, 0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30, 1.35, 1.40, 1.45, 1.50` |
+
+## Stage 2 Three-Year Results
+
+| PCRA tier | Uncalibrated | Calibrated | Target | Calibrated minus target |
+|---|---:|---:|---:|---:|
 | Low | 65.5% | 52.3% | 46.2% | +6.1 pp |
 | Low-Moderate | 66.0% | 69.4% | 72.0% | −2.6 pp |
 | Moderate | 65.9% | 82.6% | 84.5% | −1.9 pp |
 | High | 65.5% | 92.0% | 91.0% | +1.0 pp |
 
-Mean |Δ| reduced from 17.35 pp (uncalibrated) to 2.90 pp (calibrated).
+| Follow-up window | Mean absolute tier deviation before calibration | Mean absolute tier deviation after calibration |
+|---|---:|---:|
+| 3 years | 17.34 pp | 2.90 pp |
+| 6 years | 19.50 pp | 9.00 pp |
+| 9 years | 20.75 pp | 12.40 pp |
 
 ---
 
-### Stage 3 — BJS Per-Offense Rearrest Calibration
+# Stage 3 — Offense-Type Calibration
 
-**Goal:** Match cumulative rearrest rates by offense type (Violent, Drug, Property,
-Other/Public Order) at 3, 6, and 9 years to BJS NCJ 250975 Table 7.
+Four offense-specific log-odds shifts are applied through `delta_off` after the Stage 1 and Stage 2 parameters are locked.
 
-**What it does:** Introduces four offense-specific log-odds shifts applied to the
-hazard equation after Stage 1–2 parameters are locked. Each shift adjusts group-level
-rearrest odds relative to the tier baseline. Parameters are swept independently; the
-sweep range for each offense is informed by the baseline residual gap observed after
-Stage 1–2 calibration.
+## Stage 3 Targets
 
-**Calibration targets and baseline gaps (3-year):**
+| Offense group | 3-year target | 6-year target | 9-year target | Source |
+|---|---:|---:|---:|---|
+| Violent | 62.2% | 74.2% | 78.7% | Alper et al. (2018), BJS NCJ 250975, Table 7 |
+| Drug | 68.6% | 79.8% | 83.8% | Alper et al. (2018), BJS NCJ 250975, Table 7 |
+| Property | 75.0% | 84.4% | 87.8% | Alper et al. (2018), BJS NCJ 250975, Table 7 |
+| Other/Public Order | 65.0% | 76.9% | 81.9% | Alper et al. (2018), BJS NCJ 250975, Table 7 |
 
-| Offense | Target | Baseline Gap | Source |
-|---------|--------|-------------|--------|
-| Violent | 62.2% | +8.6 pp over target | Alper et al. (2018), NCJ 250975 Table 7 |
-| Drug | 68.6% | −0.1 pp under target | Alper et al. (2018), NCJ 250975 Table 7 |
-| Property | 75.0% | −8.9 pp under target | Alper et al. (2018), NCJ 250975 Table 7 |
-| Other/Public Order | 65.0% | +8.1 pp over target | Alper et al. (2018), NCJ 250975 Table 7 |
+## Stage 3 Parameters and Sweeps
 
-**Estimated parameters:**
+| Symbol | Code parameter | Baseline | Sweep specification | Selected value | Loss |
+|---|---|---:|---|---:|---|
+| o_v | `offense_hazard_shift.Violent` | 0.000 | −0.40 to +0.05; 10 values; step 0.05 | **−0.300** | Offense MAE across 12 cells |
+| o_d | `offense_hazard_shift.Drug` | 0.000 | −0.15 to +0.20; 8 values; step 0.05 | **+0.050** | Offense MAE across 12 cells |
+| o_p | `offense_hazard_shift.Property` | 0.000 | +0.20 to +0.80; 13 values; step 0.05 | **+0.600** | Offense MAE across 12 cells |
+| o_o | `offense_hazard_shift.Other(PublicOrder)` | 0.000 | −0.40 to +0.05; 10 values; step 0.05 | **−0.400** | Offense MAE across 12 cells |
 
-| Symbol | Parameter | Baseline | Calibrated | Sweep Range | Step |
-|--------|-----------|----------|------------|-------------|------|
-| o_v | Violent offense shift | 0.000 | **−0.300** | [−0.40, +0.05] | ~0.05 |
-| o_d | Drug offense shift | 0.000 | **+0.050** | [−0.15, +0.20] | ~0.05 |
-| o_p | Property offense shift | 0.000 | **+0.600** | [+0.20, +0.80] | 0.05 |
-| o_o | Other/Public Order shift | 0.000 | **−0.400** | [−0.40, +0.05] | ~0.05 |
+## Exact Stage 3 Sweep Values
 
-**Loss function:** Mean absolute error across 12 cells (4 offense types × 3 follow-up
-windows). Each offense is swept independently with all other parameters locked.
+| Symbol | Candidate values |
+|---|---|
+| o_v | `-0.40, -0.35, -0.30, -0.25, -0.20, -0.15, -0.10, -0.05, 0.00, 0.05` |
+| o_d | `-0.15, -0.10, -0.05, 0.00, 0.05, 0.10, 0.15, 0.20` |
+| o_p | `0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80` |
+| o_o | `-0.40, -0.35, -0.30, -0.25, -0.20, -0.15, -0.10, -0.05, 0.00, 0.05` |
+
+## Stage 3 Calibrated Differences
+
+| Offense group | 3-year difference | 6-year difference | 9-year difference |
+|---|---:|---:|---:|
+| Violent | +4.0 pp | −0.3 pp | −3.4 pp |
+| Drug | +0.4 pp | −1.2 pp | −3.7 pp |
+| Property | +0.0 pp | +0.7 pp | −1.0 pp |
+| Other/Public Order | +0.6 pp | −0.6 pp | −3.6 pp |
 
 ---
 
-## Full Parameter Summary
+# Complete SBP-BRiMS Calibration Summary
 
-Fixed parameters were derived directly from the BJS hazard decomposition and were not estimated during calibration. Each estimated parameter was calibrated independently using a one-at-a-time (OAT) grid-search procedure. Candidate values were evaluated over predefined search ranges using 10 replications across 10 random seeds (100 stochastic simulations). Previously calibrated parameters remained fixed during subsequent calibration stages, and the parameter value minimizing the stage-specific objective function was selected.
+| Stage | Symbol | Parameter | Status | Sweep range or fixed value | Number of candidates | Selected value | Calibration objective |
+|---|:---:|---|---|---|---:|---:|---|
+| 1 | α | Supervision monitoring intensity | Estimated | 1.00–1.20 | 11 | **1.120** | National MAE at 3, 6, and 9 years |
+| 1 | δ_s3 | Supervision decay after year 3 | Estimated | 0.60–0.99 | 13 | **0.990** | National aggregate MAE; 6-year primary |
+| 1 | δ_s6 | Supervision decay after year 6 | Estimated | 0.20–0.70 | 11 | **0.400** | National aggregate MAE; 9-year primary |
+| 1 | dr1 | Desistance ratio after year 1 | BJS-fixed | 0.524 | 1 | **0.524** | BJS hazard decomposition |
+| 1 | dr3 | Desistance ratio after year 3 | BJS-fixed | 0.500 | 1 | **0.500** | BJS hazard decomposition |
+| 1 | dr6 | Desistance ratio after year 6 | BJS-fixed | 0.508 | 1 | **0.508** | BJS hazard decomposition |
+| 2 | γ | PCRA tier risk contrast | Estimated | 0.75–1.50 | 16 | **1.000** | PCRA-tier MAE across 12 cells |
+| 3 | o_v | Violent offense shift | Estimated | −0.40 to +0.05 | 10 | **−0.300** | Offense MAE across 12 cells |
+| 3 | o_d | Drug offense shift | Estimated | −0.15 to +0.20 | 8 | **+0.050** | Offense MAE across 12 cells |
+| 3 | o_p | Property offense shift | Estimated | +0.20 to +0.80 | 13 | **+0.600** | Offense MAE across 12 cells |
+| 3 | o_o | Other/Public Order shift | Estimated | −0.40 to +0.05 | 10 | **−0.400** | Offense MAE across 12 cells |
 
-| Stage | Symbol | Parameter | Search Range | Objective Function | Selected Value |
-|-------|:------:|-----------|--------------|--------------------|---------------:|
-| 1 | α | Supervision Monitoring Intensity | 1.00–1.20 | Aggregate BJS MAE (3, 6, 9 yr) | **1.120** |
-| 1 | dr1 | Desistance Ratio (1–3 yr) | Fixed | BJS hazard decomposition | **0.524** |
-| 1 | dr3 | Desistance Ratio (3–6 yr) | Fixed | BJS hazard decomposition | **0.500** |
-| 1 | dr6 | Desistance Ratio (6–9 yr) | Fixed | BJS hazard decomposition | **0.508** |
-| 1 | δs3 | Supervision Decay (3–6 yr) | 0.60–0.99 | Aggregate BJS MAE | **0.990** |
-| 1 | δs6 | Supervision Decay (6–9 yr) | 0.20–0.70 | Aggregate BJS MAE | **0.400** |
-| 2 | γ | Risk Contrast Strength | 0.75–1.50 | PCRA Tier MAE (4 tiers × 3 windows) | **1.000** |
-| 3 | ov | Violent Hazard Shift | −0.40–0.05 | Offense MAE (4 offenses × 3 windows) | **−0.300** |
-| 3 | od | Drug Hazard Shift | −0.15–0.20 | Offense MAE | **0.050** |
-| 3 | op | Property Hazard Shift | 0.20–0.80 | Offense MAE | **0.600** |
-| 3 | oo | Other/Public Order Hazard Shift | −0.40–0.05 | Offense MAE | **−0.400** |
+---
+
+## Sensitivity and Robustness Experiments
+
+These experiments validate the calibrated SBP-BRiMS model but are not additional calibration stages.
+
+| Experiment | Design | Simulation count | Purpose |
+|---|---|---:|---|
+| OAT sensitivity analysis | 13 parameters × 9 perturbation levels × 100 simulations | 11,700 | Quantify local sensitivity under ±10% to ±40% perturbations |
+| Stress testing | 19 scenarios × 200 simulations | 3,800 | Evaluate single-parameter perturbations, baseline behavior, and two joint extremes |
 
 ---
 
 ## Output Files
 
-```
-OAT_Calibrate_BJS_PCRA_Offense_Output/
-│
-├── baseline.json                        # Uncalibrated run results
-├── recommended_params.json              # All 11 final calibrated parameters
-│
-├── sweep_alpha.csv                      # Stage 1: α sweep
-├── sweep_smi_decay3y.csv                # Stage 1: δ_s3 sweep
-├── sweep_smi_decay6y.csv                # Stage 1: δ_s6 sweep
-├── sweep_gamma.csv                      # Stage 2: γ sweep
-├── sweep_oshift_violent.csv             # Stage 3: o_v sweep
-├── sweep_oshift_drug.csv                # Stage 3: o_d sweep
-├── sweep_oshift_property.csv            # Stage 3: o_p sweep
-├── sweep_oshift_pubord.csv              # Stage 3: o_o sweep
-│
-├── FINAL_calibration_summary.png        # Parameter table + aggregate bar chart
-├── THREE_WAY_comparison.png             # 4-panel: bars / error bars / MAE table / lollipop
-├── CalibrationSummary.png               # Clean single-panel aggregate summary
-├── STAGE3_offense_validation.png        # Per-offense baseline vs. calibrated vs. BJS
-├── chart3_cumulative_by_offense.png     # Cumulative trajectories by offense type
-│
-├── equifinality.png                     # Tier rates: uncalibrated vs. calibrated vs. PCRA
-├── tier_chart1_before_after_3yr.png     # Stage 2 before/after by tier
-├── tier_chart2_trajectories.png         # Per-tier trajectories 3/6/9 yr
-├── tier_chart3_gap_heatmap.png          # Tier × window gap heatmap
-├── tier_chart4_dashboard.png            # Aggregate + tier dashboard
-├── tier_composition.png                 # PCRA tier composition donut
-│
-├── seed_strip.png                       # Per-seed strip plot
-├── seed_strip_with_within_run_ci.png    # Two-layer uncertainty view
-├── seed_convergence.png                 # Running mean convergence across seeds
-└── seed_mcse_errorbar.png              # 95% CI of the mean vs. BJS target
-```
+| File | Stage or purpose |
+|---|---|
+| `baseline.json` | Uncalibrated baseline results |
+| `recommended_params.json` | Final calibrated parameter values |
+| `sweep_alpha.csv` | Stage 1 α sweep |
+| `sweep_smi_decay3y.csv` | Stage 1 δ_s3 sweep |
+| `sweep_smi_decay6y.csv` | Stage 1 δ_s6 sweep |
+| `sweep_gamma.csv` | Stage 2 γ sweep |
+| `sweep_oshift_violent.csv` | Stage 3 violent-offense sweep |
+| `sweep_oshift_drug.csv` | Stage 3 drug-offense sweep |
+| `sweep_oshift_property.csv` | Stage 3 property-offense sweep |
+| `sweep_oshift_pubord.csv` | Stage 3 public-order sweep |
+| `CalibrationSummary.png` | Aggregate calibration figure |
+| `equifinality_3windows.png` | PCRA tier calibration figure |
+| `chart3_cumulative_by_offense.png` | Offense-specific calibration figure |
+| `oat_tornado_3yr.png` | OAT sensitivity figure |
 
 ---
 
-## Running the Code
+## Running the Calibration
 
-### Full calibration (runs all simulations — slow)
-```bash
-python OAT_Calibrate_BJS_PCRA.py
-```
-
-### Replot all charts from existing results (fast — no simulations)
-```bash
-python OAT_Calibrate_BJS_PCRA.py --replot
-```
-
-### Force re-run ignoring checkpoints
-```bash
-python OAT_Calibrate_BJS_PCRA.py --rerun
-```
-
-### Specify number of parallel workers
-```bash
-python OAT_Calibrate_BJS_PCRA.py --cores 8
-```
-
-> Core detection is automatic via `psutil` if installed. Without it, the script
-> falls back to `multiprocessing.cpu_count() // 2 - 1`.
+| Command | Purpose |
+|---|---|
+| `python OAT_Calibrate_BJS_PCRA.py` | Run the complete calibration |
+| `python OAT_Calibrate_BJS_PCRA.py --replot` | Regenerate figures from saved results |
+| `python OAT_Calibrate_BJS_PCRA.py --rerun` | Ignore checkpoints and rerun simulations |
+| `python OAT_Calibrate_BJS_PCRA.py --cores 8` | Use eight parallel workers |
 
 ---
 
 ## Dependencies
 
-```
-python >= 3.9
-mesa
-numpy
-pandas
-matplotlib
-tqdm
-psutil          # optional — for automatic core detection
-```
+| Dependency | Requirement |
+|---|---|
+| Python | 3.9 or later |
+| Mesa | Required |
+| NumPy | Required |
+| pandas | Required |
+| Matplotlib | Required |
+| tqdm | Required |
+| psutil | Optional; used for automatic CPU-core detection |
 
 ```bash
 pip install mesa numpy pandas matplotlib tqdm psutil
@@ -343,20 +317,18 @@ pip install mesa numpy pandas matplotlib tqdm psutil
 
 ## References
 
-- Alper, M., Durose, M. R., & Markman, J. (2018). *2018 Update on Prisoner Recidivism:
-  A 9-Year Follow-Up Period (2005–2014)*. BJS NCJ 250975.
-- Johnson, J. L. (2023). Predicting reentry success using the Post-Conviction Risk
-  Assessment. *Federal Probation, 87*(2), Table 6.
-- Petersilia, J. (2003). *When Prisoners Come Home: Parole and Prisoner Reentry*.
-  Oxford University Press.
-- Langan, P. A., & Levin, D. J. (2002). *Recidivism of Prisoners Released in 1994*.
-  BJS NCJ 193427.
+| Reference | Use in calibration |
+|---|---|
+| Alper, M., Durose, M. R., and Markman, J. (2018). *2018 Update on Prisoner Recidivism: A 9-Year Follow-up Period (2005–2014).* BJS NCJ 250975. | National and offense-specific rearrest targets |
+| Johnson, J. L. (2023). “Federal Post-Conviction Supervision Outcomes.” *Federal Probation*, 87(2), 20–28. | PCRA risk-tier targets |
+| Petersilia, J. (2003). *When Prisoners Come Home.* Oxford University Press. | Supervision-decay rationale |
+| Windrum, P., Fagiolo, G., and Moneta, A. (2007). “Empirical Validation of Agent-Based Models.” *Journal of Artificial Societies and Social Simulation*, 10(2), 8. | Sequential calibration and equifinality rationale |
 
 ---
 
 ## Citation
 
-```
-Rakkiappan, R., & Kavak, H. (2026). An Agent-Based Model of Recidivism.
+```text
+Rakkiappan, R., and Kavak, H. (2026). An Agent-Based Model of Recidivism.
 In Proceedings of SBP-BRiMS 2026.
 ```
