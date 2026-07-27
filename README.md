@@ -158,39 +158,71 @@ It does **not** exponentiate the individual normalized risk score. When `gamma =
 
 ## Stage 2 Targets
 
-| PCRA tier | 3-year target | 6-year target | 9-year target | Source |
-|---|---:|---:|---:|---|
-| Low | 46.2% | 61.4% | 67.6% | Johnson (2023), *Federal Probation* 87(2), Table 6 |
-| Low-Moderate | 72.0% | 84.3% | 88.8% | Johnson (2023), *Federal Probation* 87(2), Table 6 |
-| Moderate | 84.5% | 92.1% | 94.6% | Johnson (2023), *Federal Probation* 87(2), Table 6 |
-| High | 91.0% | 95.0% | 95.0% | Johnson (2023), *Federal Probation* 87(2), Table 6 |
+| PCRA Tier | 3-Year Target | 6-Year Target | 9-Year Target | Source |
+|-----------|--------------:|--------------:|--------------:|--------|
+| Low | 46.2% | 61.4% | 67.6% | Johnson (2023), *Federal Probation*, 87(2), Table 6 |
+| Low-Moderate | 72.0% | 84.3% | 88.8% | Johnson (2023), *Federal Probation*, 87(2), Table 6 |
+| Moderate | 84.5% | 92.1% | 94.6% | Johnson (2023), *Federal Probation*, 87(2), Table 6 |
+| High | 91.0% | 95.0% | 95.0% | Johnson (2023), *Federal Probation*, 87(2), Table 6 |
+
+---
 
 ## Stage 2 Parameter and Sweep
 
-| Symbol | Code parameter | Meaning | Baseline | Sweep specification | Selected value | Loss |
-|---|---|---|---:|---|---:|---|
-| γ | `Risk_Contrast_Strength` | Multiplier on fixed PCRA tier log-odds contrasts | 0.000 | 0.75–1.50; 16 values; step 0.05 | **1.000** | MAE across 12 tier × window cells |
+| Symbol | Code Parameter | Meaning | Baseline | Sweep | Selected Value | Calibration Objective |
+|--------|----------------|---------|---------:|-------|---------------:|-----------------------|
+| γ | `Risk_Contrast_Strength` | Multiplier on fixed PCRA tier log-odds contrasts | 0.000 | 0.75–1.50 (step 0.05; 16 values) | **1.000** | Minimize MAE across 12 PCRA calibration targets (4 tiers × 3 follow-up windows) |
+
+---
 
 ## Exact Stage 2 Sweep Values
 
-| Symbol | Candidate values |
-|---|---|
+| Symbol | Candidate Values |
+|--------|------------------|
 | γ | `0.75, 0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15, 1.20, 1.25, 1.30, 1.35, 1.40, 1.45, 1.50` |
 
-## Stage 2 Three-Year Results
+---
 
-| PCRA tier | Uncalibrated | Calibrated | Target | Calibrated minus target |
-|---|---:|---:|---:|---:|
-| Low | 65.5% | 52.3% | 46.2% | +6.1 pp |
-| Low-Moderate | 66.0% | 69.4% | 72.0% | −2.6 pp |
-| Moderate | 65.9% | 82.6% | 84.5% | −1.9 pp |
-| High | 65.5% | 92.0% | 91.0% | +1.0 pp |
+## Stage 2 Calibration Results
 
-| Follow-up window | Mean absolute tier deviation before calibration | Mean absolute tier deviation after calibration |
-|---|---:|---:|
-| 3 years | 17.34 pp | 2.90 pp |
-| 6 years | 19.50 pp | 9.00 pp |
-| 9 years | 20.75 pp | 12.40 pp |
+### 3-Year Follow-up
+
+| PCRA Tier | Stage 1 (γ = 0) | Calibrated | Target | Δ (Calibrated − Target) |
+|-----------|----------------:|-----------:|-------:|------------------------:|
+| Low | 70.7% | 52.3% | 46.2% | +6.1 pp |
+| Low-Moderate | 69.0% | 69.4% | 72.0% | −2.6 pp |
+| Moderate | 65.7% | 82.6% | 84.5% | −1.9 pp |
+| High | 62.5% | 92.0% | 91.0% | +1.0 pp |
+
+### 6-Year Follow-up
+
+| PCRA Tier | Stage 1 (γ = 0) | Calibrated | Target | Δ (Calibrated − Target) |
+|-----------|----------------:|-----------:|-------:|------------------------:|
+| Low | 82.0% | 69.5% | 61.4% | +8.1 pp |
+| Low-Moderate | 79.9% | 81.2% | 84.3% | −3.1 pp |
+| Moderate | 76.5% | 90.0% | 92.1% | −2.1 pp |
+| High | 73.3% | 96.0% | 95.0% | +1.0 pp |
+
+### 9-Year Follow-up
+
+| PCRA Tier | Stage 1 (γ = 0) | Calibrated | Target | Δ (Calibrated − Target) |
+|-----------|----------------:|-----------:|-------:|------------------------:|
+| Low | 84.2% | 76.6% | 67.6% | +9.0 pp |
+| Low-Moderate | 82.3% | 85.6% | 88.8% | −3.2 pp |
+| Moderate | 79.4% | 92.5% | 94.6% | −2.1 pp |
+| High | 77.0% | 96.0% | 95.0% | +1.0 pp |
+
+---
+
+## Stage 2 Calibration Accuracy
+
+| Follow-up Window | Stage 1 MAE | Calibrated MAE |
+|-----------------|------------:|---------------:|
+| 3 Years | **18.70 pp** | **2.90 pp** |
+| 6 Years | **15.57 pp** | **3.58 pp** |
+| 9 Years | **14.08 pp** | **3.83 pp** |
+
+**Summary:** Aggregate calibration alone reproduces national rearrest rates but fails to recover the empirical ordering of PCRA risk tiers. Stage 2 calibrates the risk-contrast parameter (γ), restoring the expected monotonic relationship between PCRA risk tier and rearrest while reducing tier-level MAE from **18.70 → 2.90 pp (3-year)**, **15.57 → 3.58 pp (6-year)**, and **14.08 → 3.83 pp (9-year)**.
 
 ---
 
